@@ -1,0 +1,10 @@
+{
+  "roundhouse": {
+    "repository": "https://github.com/rubys/roundhouse",
+    "commit": "a1b00e050b36d56667ceb441f6803a45a138d12e"
+  },
+  "spinel": {
+    "repository": "https://github.com/matz/spinel",
+    "commit": "cb02341960f872e449d666845dc8e53ae76ff266"
+  }
+}

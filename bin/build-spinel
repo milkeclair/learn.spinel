@@ -1,0 +1,60 @@
+#!/usr/bin/env ruby
+require "bundler/setup"
+require "json"
+require "fileutils"
+require "open3"
+
+root = File.expand_path("..", __dir__)
+Dir.chdir(root)
+pins = JSON.parse(File.read("toolchain.json"))
+
+def run(*args, **options)
+  puts "+ #{args.join(" ")}"
+  system(*args, **options) || abort("失敗: #{args.first}")
+end
+
+def library_directory(package)
+  directory, result = Open3.capture2("pkg-config", "--variable=libdir", package)
+  directory = directory.strip
+  abort("#{package}のライブラリディレクトリを取得できません。") unless result.success? && !directory.empty?
+  directory
+end
+
+pins.each do |name, pin|
+  directory = File.join(root, ".tools", name)
+  unless File.directory?(directory)
+    run("git", "clone", "--no-checkout", pin.fetch("repository"), directory)
+    run("git", "checkout", "--detach", pin.fetch("commit"), chdir: directory)
+  end
+  actual, result = Open3.capture2("git", "rev-parse", "HEAD", chdir: directory)
+  abort("#{name}のcommitがtoolchain.jsonと一致しません。") unless result.success? && actual.strip == pin.fetch("commit")
+end
+
+roundhouse = File.join(root, ".tools", "roundhouse")
+spinel = File.join(root, ".tools", "spinel")
+run("cargo", "build", "--release", "--locked", "--bin", "roundhouse", chdir: roundhouse)
+run("make", "deps", chdir: spinel)
+run("make", "-j4", chdir: spinel)
+sqlite_directory = library_directory("sqlite3")
+ENV["LIBRARY_PATH"] = [sqlite_directory, ENV["LIBRARY_PATH"]].compact.join(File::PATH_SEPARATOR)
+spin = File.join(spinel, "bin", "spin")
+
+output = File.join(root, "out", "spinel")
+FileUtils.rm_rf(output)
+run(File.join(roundhouse, "target", "release", "roundhouse"), "--target", "spinel", "-o", output, root)
+run("make", "assets", chdir: output)
+run(spin, "build", chdir: output)
+run(spin, "pack", "blog", "--out", "build/c", chdir: output)
+File.write(File.join(output, "build", "library-path"),
+  [sqlite_directory, library_directory("jemalloc")].join(File::PATH_SEPARATOR))
+
+require "sqlite3"
+database = File.join(root, "storage", "spinel.sqlite3")
+unless File.exist?(database)
+  SQLite3::Database.new(database) do |db|
+    db.execute_batch(File.read(File.join(output, "db", "seed.sql")))
+  end
+end
+puts "生成Ruby: #{output}"
+puts "C: #{output}/build/c"
+puts "実行: bin/run-spinel"

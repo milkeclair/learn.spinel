@@ -1,0 +1,9 @@
+#!/usr/bin/env ruby
+root = File.expand_path("..", __dir__)
+output = File.join(root, "out", "spinel")
+binary = File.join(output, "build", "bin", "blog")
+abort("先にbin/build-spinelを実行してください。") unless File.executable?(binary)
+libraries = File.read(File.join(output, "build", "library-path")).strip
+ENV["LD_LIBRARY_PATH"] = [libraries, ENV["LD_LIBRARY_PATH"]].compact.join(File::PATH_SEPARATOR) unless libraries.empty?
+ENV["BLOG_DB"] ||= File.join(root, "storage", "spinel.sqlite3")
+exec(binary, *ARGV, chdir: output)
