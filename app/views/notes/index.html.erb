@@ -1,0 +1,15 @@
+<div class="heading">
+  <h1>メモ一覧</h1>
+  <%= link_to "新しいメモ", new_note_path, class: "button" %>
+</div>
+<% if @notes.empty? %>
+  <p class="empty">まだメモはありません。新しいメモを書いてみましょう。</p>
+<% end %>
+<div class="notes">
+  <% @notes.each do |note| %>
+    <article>
+      <h2><%= link_to note.title, note %></h2>
+      <p class="body preview"><%= note.body %></p>
+    </article>
+  <% end %>
+</div>

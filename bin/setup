@@ -1,0 +1,8 @@
+#!/usr/bin/env ruby
+require "fileutils"
+
+Dir.chdir(File.expand_path("..", __dir__)) do
+  system("bundle", "config", "set", "--local", "path", "vendor/bundle", exception: true)
+  system("bundle", "install", exception: true)
+  system("bin/rails", "db:prepare", exception: true)
+end

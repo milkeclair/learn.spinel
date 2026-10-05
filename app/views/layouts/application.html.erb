@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <title>メモ帳</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <%= csrf_meta_tags %>
+    <%= stylesheet_link_tag "application" %>
+  </head>
+  <body>
+    <main>
+      <header>
+        <%= link_to "メモ帳", notes_path, class: "brand" %>
+        <span>Rails → Roundhouse → Spinel</span>
+      </header>
+      <% if notice %>
+        <p class="notice" role="status"><%= notice %></p>
+      <% end %>
+      <%= yield %>
+    </main>
+  </body>
+</html>

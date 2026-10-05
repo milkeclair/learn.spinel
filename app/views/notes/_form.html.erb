@@ -1,0 +1,16 @@
+<%= form_with(model: note, local: true) do |form| %>
+  <% if note.errors.any? %>
+    <div class="errors" role="alert">
+      <p>タイトルを入力してください。</p>
+    </div>
+  <% end %>
+  <div class="field">
+    <%= form.label :title, "タイトル" %>
+    <%= form.text_field :title %>
+  </div>
+  <div class="field">
+    <%= form.label :body, "本文" %>
+    <%= form.text_area :body, rows: 10 %>
+  </div>
+  <%= form.submit "保存", class: "button" %>
+<% end %>

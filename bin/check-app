@@ -1,0 +1,82 @@
+#!/usr/bin/env ruby
+require "bundler/setup"
+require "net/http"
+require "nokogiri"
+require "uri"
+
+base = URI(ARGV.fetch(0))
+cookies = {}
+check_count = 0
+
+check = lambda do |condition, message|
+  raise message unless condition
+  check_count += 1
+end
+
+request = lambda do |method, path, params = nil|
+  uri = URI.join(base.to_s, path)
+  http = Net::HTTP.new(uri.host, uri.port, nil)
+  http.open_timeout = 5
+  http.read_timeout = 10
+  req = method == :get ? Net::HTTP::Get.new(uri) : Net::HTTP::Post.new(uri)
+  req["Cookie"] = cookies.map { |name, value| "#{name}=#{value}" }.join("; ")
+  req.set_form_data(params) if params
+  response = http.request(req)
+  response.get_fields("set-cookie").to_a.each do |cookie|
+    name, value = cookie.split(";", 2).first.split("=", 2)
+    cookies[name] = value
+  end
+  response
+end
+
+form_params = lambda do |response|
+  Nokogiri::HTML5(response.body, nil, "UTF-8").css("form input[type=hidden]").to_h do |input|
+    [input["name"], input["value"] || ""]
+  end
+end
+
+response = request.call(:get, "/")
+check.call(response.code == "200", "一覧")
+document = Nokogiri::HTML5(response.body, nil, "UTF-8")
+stylesheet = document.at_css('link[rel="stylesheet"]')["href"]
+check.call(request.call(:get, stylesheet).code == "200", "CSS")
+
+response = request.call(:get, "/notes/new")
+check.call(response.code == "200", "新規フォーム")
+params = form_params.call(response).merge("note[title]" => " ", "note[body]" => "入力中")
+response = request.call(:post, "/notes", params)
+check.call(response.code == "422", "空タイトルを拒否")
+value = Nokogiri::HTML5(response.body, nil, "UTF-8").at_css("textarea").text
+check.call(value == "入力中", "エラー時の本文: #{value.inspect}")
+params = form_params.call(response).merge("note[title]" => "日本語 <script> ' &", "note[body]" => "1行目
+<b>本文</b>")
+response = request.call(:post, "/notes", params)
+check.call(response.code == "302", "作成")
+note_path = URI(response["location"]).path
+response = request.call(:get, note_path)
+document = Nokogiri::HTML5(response.body, nil, "UTF-8")
+check.call(document.at_css("h1").text == "日本語 <script> ' &", "タイトルを保存")
+check.call(document.at_css("p.body").text == "1行目
+<b>本文</b>", "本文を保存")
+check.call(document.css("script, p.body b").empty?, "HTMLをエスケープ")
+check.call(document.text.include?("メモを保存しました。"), "作成通知")
+
+response = request.call(:get, "#{note_path}/edit")
+check.call(response.code == "200", "編集フォーム")
+params = form_params.call(response).merge("note[title]" => "", "note[body]" => "変更")
+response = request.call(:post, note_path, params)
+check.call(response.code == "422", "不正な更新を拒否")
+check.call(Nokogiri::HTML5(request.call(:get, note_path).body, nil, "UTF-8").at_css("h1").text == "日本語 <script> ' &", "不正更新後も保存内容を維持")
+params = form_params.call(response).merge("note[title]" => "更新済み", "note[body]" => "更新本文")
+response = request.call(:post, note_path, params)
+check.call(response.code == "303", "更新")
+response = request.call(:get, note_path)
+document = Nokogiri::HTML5(response.body, nil, "UTF-8")
+check.call(document.at_css("h1").text == "更新済み", "更新内容")
+check.call(document.text.include?("メモを更新しました。"), "更新通知")
+check.call(Nokogiri::HTML5(request.call(:get, "/notes").body, nil, "UTF-8").text.include?("更新済み"), "一覧に反映")
+response = request.call(:post, note_path, form_params.call(response).merge("_method" => "delete"))
+check.call(response.code == "303", "削除")
+check.call(request.call(:get, note_path).code == "404", "削除済みメモ")
+check.call(Nokogiri::HTML5(request.call(:get, "/notes").body, nil, "UTF-8").text.include?("メモを削除しました。"), "削除通知")
+puts "#{base}: #{check_count} checks passed"
